@@ -2,6 +2,7 @@
 #include <vector>
 #include <random>   // For random number generation
 #include <chrono>   // For seeding the random number generator
+#include <algorithm>
 
 // Define Map as a vector of vectors of integers.
 // You can change 'int' to whatever type best represents your cells (e.g., char, bool).
@@ -40,7 +41,34 @@ Map cellularAutomata(const Map& currentMap, int W, int H, int R, double U) {
     // Iterate over each cell and apply the transition rules.
     // Remember that updates should be based on the 'currentMap' state
     // and applied to the 'newMap' to avoid race conditions within the same iteration.
+    
+     Map newMap = currentMap; // Inicialmente igual
 
+    for (int i = 0; i < H; ++i) 
+    {
+        for (int j = 0; j < W; ++j) 
+        {
+            int count = 0;
+            int total = 0;
+            // Recorre la ventana de vecinos
+            for (int dx = -R; dx <= R; ++dx) 
+            {
+                for (int dy = -R; dy <= R; ++dy) 
+                {
+                    int ni = i + dx;
+                    int nj = j + dy;
+                    if (ni >= 0 && ni < H && nj >= 0 && nj < W) 
+                    {
+                        count += currentMap[ni][nj];
+                        total++;
+                    } 
+                }
+            }
+            
+            double prop = static_cast<double>(count) / total;
+            newMap[i][j] = (prop > U) ? 1 : 0;
+        }
+    }
     return newMap;
 }
 
@@ -70,54 +98,122 @@ Map drunkAgent(const Map& currentMap, int W, int H, int J, int I, int roomSizeX,
                int& agentX, int& agentY) {
     Map newMap = currentMap; // The new map is a copy of the current one
 
-    // TODO: IMPLEMENTATION GOES HERE for the Drunk Agent logic.
-    // The agent should move randomly.
-    // You'll need a random number generator.
-    // Consider:
-    // - How the agent moves (possible steps).
-    // - What it does if it encounters a border or an obstacle (if applicable).
-    // - How it modifies the map (e.g., leaving a trail, creating rooms, etc.).
-    // - Use the provided parameters (J, I, roomSizeX, roomSizeY, probabilities)
-    //   to control its behavior.
+    Map newMap = currentMap;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dirDist(0, 3);
+    std::uniform_real_distribution<> probDist(0.0, 1.0);
 
+    int dx[4] = {0, 1, 0, -1};
+    int dy[4] = {-1, 0, 1, 0};
+    int direction = dirDist(gen);
+
+    for(int j = 0; j < J; j++)
+    {
+       for(int i = 0; i < I; i++)
+       {
+
+        if(agentX >= 0 && agentX < H && agentY >= 0 && agentY < W)
+        {
+           newMap[agentX][agentY] = 1;
+        }
+
+        //proba para generar una pieza
+
+        if(probDist(gen) < probGenerateRoom)
+        {
+          // Genera la habitacion centrada en el agente
+            int startX = std::max(0, agentX - roomSizeX / 2);
+            int endX = std::min(H, agentX + roomSizeX / 2);
+            int startY = std::max(0, agentY - roomSizeY / 2);
+            int endY = std::min(W, agentY + roomSizeY / 2);
+             
+             for (int x = startX; x < endX; ++x)
+                    for (int y = startY; y < endY; ++y)
+                        newMap[x][y] = 1;
+
+                probGenerateRoom = probIncreaseRoom; // Reinicia la probaAAAAAAAAAAAAA
+            } else 
+            {
+                probGenerateRoom += probIncreaseRoom; // Aumenta la probaAAAAAAAAAAAA
+            }
+
+            // Probabilidad de cambiar la direccion
+            if (probDist(gen) < probChangeDirection) 
+            {
+                direction = dirDist(gen);
+                probChangeDirection = probIncreaseChange;
+            } else 
+            {
+                probChangeDirection += probIncreaseChange;
+            }
+
+            // Mueve al agente
+            int nextX = agentX + dx[direction];
+            int nextY = agentY + dy[direction];
+
+            // Si se sale del borde, cambia la direccion al azar 
+            if (nextX < 0 || nextX >= H || nextY < 0 || nextY >= W) 
+            {
+                direction = dirDist(gen);
+                break;
+            } else 
+            {
+                agentX = nextX;
+                agentY = nextY;
+            }
+            
+        }
+
+       }
+    
     return newMap;
 }
 
 int main() {
-    std::cout << "--- CELLULAR AUTOMATA AND DRUNK AGENT SIMULATION ---" << std::endl;
+     std::cout << "--- CELLULAR AUTOMATA AND DRUNK AGENT SIMULATION ---" << std::endl;
 
-    // --- Initial Map Configuration ---
+    // --- Configuración inicial del mapa ---
     int mapRows = 10;
     int mapCols = 20;
-    Map myMap(mapRows, std::vector<int>(mapCols, 0)); // Map initialized with zeros
+    Map myMap(mapRows, std::vector<int>(mapCols, 0)); 
 
-    // TODO: IMPLEMENTATION GOES HERE: Initialize the map with some pattern or initial state.
-    // For example, you might set some cells to 1 for the cellular automata
-    // or place the drunk agent at a specific position.
+    //el bool es para cambiar de agente
+    bool usarAutomataCelular = true;
+    bool usarDrunkAgent = false; 
 
-    // Drunk Agent's initial position
+    // --- Inicialización aleatoria para autómata celular ---
+    if (usarAutomataCelular) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> valDist(0, 1);
+        for (int i = 0; i < mapRows; ++i)
+            for (int j = 0; j < mapCols; ++j)
+                myMap[i][j] = valDist(gen);
+    }
+   
+
+    // --- Posición inicial del Drunk Agent ---
     int drunkAgentX = mapRows / 2;
     int drunkAgentY = mapCols / 2;
-    // If your agent modifies the map at start, you could do it here:
-    // myMap[drunkAgentX][drunkAgentY] = 2; // Assuming '2' represents the agent
 
-    std::cout << "\nInitial map state:" << std::endl;
+    std::cout << "\nEstado inicial del mapa:" << std::endl;
     printMap(myMap);
 
-    // --- Simulation Parameters ---
-    int numIterations = 5; // Number of simulation steps
+    // --- Parámetros de la simulación ---
+    int numIterations = 5; // Número de iteraciones
 
-    // Cellular Automata Parameters
+    // Parámetros Cellular Automata
     int ca_W = mapCols;
     int ca_H = mapRows;
-    int ca_R = 1;      // Radius of neighbor window
-    double ca_U = 0.5; // Threshold
+    int ca_R = 1;      // Radio de la ventana de vecinos
+    double ca_U = 0.5; // Umbral
 
-    // Drunk Agent Parameters
+    // Parámetros Drunk Agent
     int da_W = mapCols;
     int da_H = mapRows;
-    int da_J = 5;      // Number of "walks"
-    int da_I = 10;     // Steps per walk
+    int da_J = 5;      // Caminatas
+    int da_I = 10;     // Pasos por caminata
     int da_roomSizeX = 5;
     int da_roomSizeY = 3;
     double da_probGenerateRoom = 0.1;
@@ -125,29 +221,24 @@ int main() {
     double da_probChangeDirection = 0.2;
     double da_probIncreaseChange = 0.03;
 
-
-    // --- Main Simulation Loop ---
+    // --- Bucle principal de la simulación ---
     for (int iteration = 0; iteration < numIterations; ++iteration) {
-        std::cout << "\n--- Iteration " << iteration + 1 << " ---" << std::endl;
+        std::cout << "\n--- Iteración " << iteration + 1 << " ---" << std::endl;
 
-        // TODO: IMPLEMENTATION GOES HERE: Call the Cellular Automata and/or Drunk Agent functions.
-        // The order of calls will depend on how you want them to interact.
+        if (usarAutomataCelular) {
+            myMap = cellularAutomata(myMap, ca_W, ca_H, ca_R, ca_U);
+        }
 
-        // Example: First the cellular automata, then the agent
-        myMap = cellularAutomata(myMap, ca_W, ca_H, ca_R, ca_U);
-        myMap = drunkAgent(myMap, da_W, da_H, da_J, da_I, da_roomSizeX, da_roomSizeY,
-                           da_probGenerateRoom, da_probIncreaseRoom,
-                           da_probChangeDirection, da_probIncreaseChange,
-                           drunkAgentX, drunkAgentY);
+        if (usarDrunkAgent) {
+            myMap = drunkAgent(myMap, da_W, da_H, da_J, da_I, da_roomSizeX, da_roomSizeY,
+                               da_probGenerateRoom, da_probIncreaseRoom,
+                               da_probChangeDirection, da_probIncreaseChange,
+                               drunkAgentX, drunkAgentY);
+        }
 
         printMap(myMap);
-
-        // You can add a delay to visualize the simulation step by step
-        // #include <thread> // For std::this_thread::sleep_for
-        // #include <chrono> // For std::chrono::milliseconds
-        // std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 
-    std::cout << "\n--- Simulation Finished ---" << std::endl;
+    std::cout << "\n--- Simulación terminada ---" << std::endl;
     return 0;
 }
