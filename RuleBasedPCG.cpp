@@ -42,8 +42,6 @@ Map cellularAutomata(const Map& currentMap, int W, int H, int R, double U) {
     // Remember that updates should be based on the 'currentMap' state
     // and applied to the 'newMap' to avoid race conditions within the same iteration.
     
-     Map newMap = currentMap; // Inicialmente igual
-
     for (int i = 0; i < H; ++i) 
     {
         for (int j = 0; j < W; ++j) 
@@ -98,7 +96,6 @@ Map drunkAgent(const Map& currentMap, int W, int H, int J, int I, int roomSizeX,
                int& agentX, int& agentY) {
     Map newMap = currentMap; // The new map is a copy of the current one
 
-    Map newMap = currentMap;
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dirDist(0, 3);
@@ -179,8 +176,8 @@ int main() {
     Map myMap(mapRows, std::vector<int>(mapCols, 0)); 
 
     //el bool es para cambiar de agente
-    bool usarAutomataCelular = true;
-    bool usarDrunkAgent = false; 
+    bool usarAutomataCelular = false;
+    bool usarDrunkAgent = true; 
 
     // --- Inicialización aleatoria para autómata celular ---
     if (usarAutomataCelular) {
