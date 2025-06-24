@@ -3,11 +3,18 @@
 #include <random>
 #include <ctime>
 #include <algorithm>
+#include <string>
+#include <limits>
+//Para leer teclas
+#include <termios.h>
+#include <unistd.h> //no existe en windows pero si en linux
+//Si compila esto
+
+
 
 //Settings del mapa
-
-const int WIDTH = 40;
-const int HEIGHT = 20;
+int WIDTH = 40;
+int HEIGHT = 20;
 const int MIN_ROOM_SIZE = 4;
 const int MIN_LEAF_SIZE = 8;
 
@@ -29,6 +36,19 @@ struct Leaf
     ~Leaf() { delete left; delete right; delete room; }
 };
 
+char getch() 
+{
+    char buf = 0;
+    struct termios old = {};
+    if (tcgetattr(0, &old) < 0) perror("tcsetattr()");
+    struct termios newt = old;
+    newt.c_lflag &= ~ICANON; // Modo sin buffer
+    newt.c_lflag &= ~ECHO;   // No mostrar caracter
+    if (tcsetattr(0, TCSANOW, &newt) < 0) perror("tcsetattr ICANON");
+    if (read(0, &buf, 1) < 0) perror ("read()");
+    if (tcsetattr(0, TCSADRAIN, &old) < 0) perror ("tcsetattr ~ICANON");
+    return buf;
+}
 //=======================RNG global======================//
 std::mt19937 rng(static_cast<unsigned int>(time(nullptr)));
 
@@ -239,37 +259,146 @@ void PlacedEnemy(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms,
   }
 }
 
+
+//===================GENERAR UNA SALIDA==================//
+
+void PlaceExit(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms)
+{
+  if (rooms.empty()) return;
+    int px = rooms[0]->center_x();
+    int py = rooms[0]->center_y();
+
+    int max_dist = -1;
+    size_t idx_salida = 0;
+
+    // Recorre todas las salas menos la inicial
+    for (size_t i = 1; i < rooms.size(); ++i) 
+    {
+        int cx = rooms[i]->center_x();
+        int cy = rooms[i]->center_y();
+        int dist = abs(cx - px) + abs(cy - py); // aplica distancia de Manhattan
+        if (dist > max_dist) {
+            max_dist = dist;
+            idx_salida = i;
+        }
+    }
+
+    // Coloca la S en la room mas lejana, en un punto que no tenga muro
+    Room* salida = rooms[idx_salida];
+    int sx = salida->center_x();
+    int sy = salida->center_y();
+
+    // Si hay un enemigo en el centro, busca otra parte
+    if (map[sy][sx] == '.') 
+    {
+        map[sy][sx] = 'S';
+    } else 
+    {
+        // Busca cualquier punto libre dentro de la sala
+        for (int y = salida->y; y < salida->y + salida->h; ++y) 
+        {
+            for (int x = salida->x; x < salida->x + salida->w; ++x) 
+            {
+                if (map[y][x] == '.') 
+                {
+                    map[y][x] = 'S';
+                    return;
+                }
+            }
+        }
+    }
+}
+
 //==============MOSTRAR EL MAPA==========//
 void PrintMap(const std::vector<std::vector<char>>& map)
 {
-for (const auto& row : map)
-{
+ for (const auto& row : map)
+ { 
     for (char c : row)
         std::cout << c;
     std::cout << "\n";
+ }
 }
+
+//====================PARAMETRIZAR EL MAPA=============//
+int LeerParametro(const std::string& prompt, int valor_por_defecto, int minimo)
+{
+ std::string input;
+ int valor;
+
+ while(true)
+ {
+   std::cout << prompt << " (por defecto: " << valor_por_defecto << ", mínimo: " << minimo << "): ";
+   std::getline(std::cin, input);
+
+   if(input.empty())
+   {
+    valor = valor_por_defecto;
+    break;
+   }
+
+   try
+   {
+    valor = std::stoi(input);
+    if(valor < minimo)
+    {
+     std::cout << "El valor debe ser al menos " << minimo << ".\n";
+    }
+    else
+    {
+      break;
+    }
+   }
+   catch(const std::exception& e)
+   {
+    std::cout << "Por favor, ingresa un número válido o deja en blanco para el valor por defecto.\n";
+   }
+   
+ }
+ return valor;
 }
 
 int main()
 {
-    std::vector<std::vector<char>> map(HEIGHT, std::vector<char>(WIDTH, '#'));
-    Leaf* root = new Leaf(0, 0, WIDTH, HEIGHT);
+    // Calcula el mínimo requerido para que funcione el BSP
+    int minimo_tamano = MIN_LEAF_SIZE * 2 + 2;
 
-    std::vector<Leaf*> leaves = { root };
-    SplitAllLeaves(leaves);
-    CreateRoom(root);
+    // Pide al usuario los parámetros
+    std::cout << "=== Parametros del Mapa ===\n";
+    WIDTH = LeerParametro("Ancho (WIDTH)", WIDTH, minimo_tamano);
+    HEIGHT = LeerParametro("Alto (HEIGHT)", HEIGHT, minimo_tamano);
 
-    std::vector<Room*> rooms;
-    FillRoom(map, root, rooms);
+    std::cout << "Presiona ENTER para generar un nuevo mapa, ESC para salir...\n";
+    while (true) {
+        std::cout << "\033[2J\033[1;1H";
 
-    ConnectLeafRoom(map, root);
-    PlacePlayer(map, rooms);
-    PlacedEnemy(map, rooms, 5);
-    PrintMap(map);
+        std::vector<std::vector<char>> map(HEIGHT, std::vector<char>(WIDTH, '#'));
+        Leaf* root = new Leaf(0, 0, WIDTH, HEIGHT);
 
-    delete root;
+        std::vector<Leaf*> leaves = { root };
+        SplitAllLeaves(leaves);
+        CreateRoom(root);
 
+        std::vector<Room*> rooms;
+        FillRoom(map, root, rooms);
 
-  return 0;
+        ConnectLeafRoom(map, root);
+        PlacePlayer(map, rooms);
+        PlacedEnemy(map, rooms, 2);
+        PlaceExit(map, rooms);
+
+        PrintMap(map);
+
+        delete root;
+
+        std::cout << "\nENTER = Nuevo mapa   |   ESC = Salir\n";
+
+        char c = getch();
+        if (c == 27) break;
+        while (c != 10 && c != 27) c = getch();
+        if (c == 27) break;
+    }
+    std::cout << "Terminando proceso...\n";
+    return 0;
 }
 
