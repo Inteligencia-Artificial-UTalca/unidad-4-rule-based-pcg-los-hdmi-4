@@ -18,6 +18,16 @@ int HEIGHT = 20;
 const int MIN_ROOM_SIZE = 4;
 const int MIN_LEAF_SIZE = 8;
 
+// Variables de caractéres
+const char floor_char = '.';
+const char wall_char = '#';
+const char empty_char = '0';
+const char enemy_char = 'E';
+const char player_char = 'P';
+const char exit_char = 'S';
+const char door_char = 'D'; // A futuro
+
+
 struct Room 
 {
   int x, y, w, h;
@@ -168,7 +178,7 @@ else if (leaf->room)
     rooms.push_back(leaf->room);
     for (int y = leaf->room->y; y < leaf->room->y + leaf->room->h; ++y)
         for (int x = leaf->room->x; x < leaf->room->x + leaf->room->w; ++x)
-            map[y][x] = '.';
+            map[y][x] = floor_char;
 }
 }
 
@@ -180,13 +190,13 @@ void ConnectRooms(std::vector<std::vector<char>>& map, Room* a, Room* b)
 
  if(rng() %2)
  {
-   for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x) map[y1][x] = '.';
-   for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y) map[y][x2] = '.';
+   for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x) map[y1][x] = floor_char;
+   for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y) map[y][x2] = floor_char;
  }
  else
  {
-  for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y) map[y][x1] = '.';
-  for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x) map[y2][x] = '.';
+  for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y) map[y][x1] = floor_char;
+  for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x) map[y2][x] = floor_char;
  }
 }
 
@@ -227,7 +237,7 @@ void PlacePlayer(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms)
 {
     if (!rooms.empty()) 
     {
-        map[rooms[0]->center_y()][rooms[0]->center_x()] = 'P';
+        map[rooms[0]->center_y()][rooms[0]->center_x()] = player_char;
     }
 }
 
@@ -249,9 +259,9 @@ void PlacedEnemy(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms,
         int ey = posy(rng);
         //Spawnear el enemigo en una parte libre sin muro
 
-        if(map[ey][ex] == '.')
+        if(map[ey][ex] == floor_char)
         {
-          map[ey][ex] = 'E';
+          map[ey][ex] = enemy_char;
           enemigos_colocados++;
         }
         intentos++;
@@ -289,9 +299,9 @@ void PlaceExit(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms)
     int sy = salida->center_y();
 
     // Si hay un enemigo en el centro, busca otra parte
-    if (map[sy][sx] == '.') 
+    if (map[sy][sx] == floor_char) 
     {
-        map[sy][sx] = 'S';
+        map[sy][sx] = exit_char;
     } else 
     {
         // Busca cualquier punto libre dentro de la sala
@@ -299,9 +309,9 @@ void PlaceExit(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms)
         {
             for (int x = salida->x; x < salida->x + salida->w; ++x) 
             {
-                if (map[y][x] == '.') 
+                if (map[y][x] == floor_char) 
                 {
-                    map[y][x] = 'S';
+                    map[y][x] = exit_char;
                     return;
                 }
             }
@@ -372,7 +382,7 @@ int main()
     while (true) {
         std::cout << "\033[2J\033[1;1H";
 
-        std::vector<std::vector<char>> map(HEIGHT, std::vector<char>(WIDTH, '#'));
+        std::vector<std::vector<char>> map(HEIGHT, std::vector<char>(WIDTH, wall_char));
         Leaf* root = new Leaf(0, 0, WIDTH, HEIGHT);
 
         std::vector<Leaf*> leaves = { root };
