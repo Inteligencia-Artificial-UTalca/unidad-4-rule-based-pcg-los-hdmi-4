@@ -22,7 +22,7 @@ int MIN_ROOM_SIZE = 4;
 int MAX_ROOM_SIZE = 8;
 int MIN_LEAF_SIZE = 8;
 int PASILLO_LOGICA = 0; //o es azar, 1 horizontal primero y el 2 es vertical primero
-int ENEMIGOS_HABITACION = 3;
+int ENEMIGOS_HABITACION = 5;
 
 //Parametros de PerlinNoise
 double FREQ = 0.08;
