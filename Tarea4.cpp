@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <string>
 #include <limits>
+#include <chrono>
+#include "Perlin_Noise.h"
+#include "Enemy.h"
 //Para leer teclas
 #include <termios.h>
 #include <unistd.h> //no existe en windows pero si en linux
@@ -15,32 +18,48 @@
 //Settings del mapa
 int WIDTH = 40;
 int HEIGHT = 20;
-const int MIN_ROOM_SIZE = 4;
-const int MIN_LEAF_SIZE = 8;
+int MIN_ROOM_SIZE = 4;
+int MAX_ROOM_SIZE = 8;
+int MIN_LEAF_SIZE = 8;
+int PASILLO_LOGICA = 0; //o es azar, 1 horizontal primero y el 2 es vertical primero
+int ENEMIGOS_HABITACION = 3;
+
+//Parametros de PerlinNoise
+double FREQ = 0.08;
+double THRES = 0.5;
+double MAXSPAWN = 0.3; //30% 
+int SECURITYRATIO = 3; //Area segura alrededor del jugador y la salida
+
+//Rango de tamaño de las salas
+//probabilidad de dirección de corte
+//logica de conexión
+
+
 
 // Variables de caractéres
-const char floor_char = '.';
-const char wall_char = '#';
-const char empty_char = '0';
-const char enemy_char = 'E';
-const char player_char = 'P';
-const char exit_char = 'S';
+const char floor_char = '.'; //Camino transitable
+const char wall_char = '#'; // Muro
+const char empty_char = '0'; //Espacio vacio 
+const char enemy_char = 'E'; //Enemigo
+const char player_char = 'P'; //el player
+const char exit_char = 'S'; //La salida
 const char door_char = 'D'; // A futuro
 
 
 struct Room 
 {
-  int x, y, w, h;
-  int center_x() const {return x + w /2; }
-  int center_y() const {return y + h /2;}
+  int x, y; //Posiciones 
+  int w, h; //Ancho y alto
+  int center_x() const {return x + w /2; } //centro horizontal
+  int center_y() const {return y + h /2;} //centro vertical
 };
 
 struct Leaf
 {
-  int x, y, w, h;
-  Leaf* left = nullptr;
-  Leaf* right = nullptr;
-  Room* room = nullptr;
+  int x, y, w, h; //dimensiones del area
+  Leaf* left = nullptr; //hoja hija izquierda
+  Leaf* right = nullptr; //hoja hija derecha
+  Room* room = nullptr; // es la room que almacena
 
   Leaf(int x_, int y_, int w_, int h_) : x(x_), y(y_), w(w_), h(h_) {}
     ~Leaf() { delete left; delete right; delete room; }
@@ -66,10 +85,10 @@ std::mt19937 rng(static_cast<unsigned int>(time(nullptr)));
 bool Split(Leaf* leaf)
 {
 
-   if(leaf ->left || leaf ->right)
-   {
+  if(leaf ->left || leaf ->right)
+  {
      return false;
-   }
+  }
   
   bool splitH = (leaf->w > leaf->h);
   if(leaf->w / leaf->h >= 1.25)
@@ -152,8 +171,20 @@ void CreateRoom(Leaf* leaf)
  }
  else
  {
-  std::uniform_int_distribution<int> room_w_dist(MIN_ROOM_SIZE, leaf->w - 2);
-  std::uniform_int_distribution<int> room_h_dist(MIN_ROOM_SIZE, leaf->h - 2);
+
+  int max_room_w = std::min(MAX_ROOM_SIZE, leaf->w - 2);
+  int max_room_h = std::min(MAX_ROOM_SIZE, leaf->h - 2);
+  if (MIN_ROOM_SIZE > max_room_w || MIN_ROOM_SIZE > max_room_h)
+  {
+     //std::cout << "ERROR: Medidas no validas\n";
+     return;
+  }
+           
+  //std::uniform_int_distribution<int> room_w_dist(MIN_ROOM_SIZE, leaf->w - 2);
+  //std::uniform_int_distribution<int> room_h_dist(MIN_ROOM_SIZE, leaf->h - 2);
+  //Para usar el tamaño maximo de la room
+  std::uniform_int_distribution<int> room_w_dist(MIN_ROOM_SIZE, std::min(MAX_ROOM_SIZE, leaf->w - 2));
+  std::uniform_int_distribution<int> room_h_dist(MIN_ROOM_SIZE, std::min(MAX_ROOM_SIZE, leaf->h - 2));
   int rw = std::min(room_w_dist(rng), leaf->w - 2);
   int rh = std::min(room_h_dist(rng), leaf->h - 2);
   std::uniform_int_distribution<int> room_x_dist(leaf->x + 1, leaf->x + leaf->w - rw - 1);
@@ -168,18 +199,29 @@ void CreateRoom(Leaf* leaf)
 //===================DIBUJA LAS ROOMS GENERADAS Y GUARDA SUS PUNTEROS==========//
 void FillRoom(std::vector<std::vector<char>>& map, Leaf* leaf, std::vector<Room*>& rooms)
 {
- if (leaf->left || leaf->right)
-{
-    if (leaf->left) FillRoom(map, leaf->left, rooms);
-    if (leaf->right) FillRoom(map, leaf->right, rooms);
-}
-else if (leaf->room)
-{
+  if (leaf->left || leaf->right)
+  {  
+    if (leaf->left)
+    {
+      FillRoom(map, leaf->left, rooms);
+    } 
+    if (leaf->right)
+    {
+      FillRoom(map, leaf->right, rooms);
+    } 
+  }
+  else if (leaf->room)
+  {
     rooms.push_back(leaf->room);
     for (int y = leaf->room->y; y < leaf->room->y + leaf->room->h; ++y)
-        for (int x = leaf->room->x; x < leaf->room->x + leaf->room->w; ++x)
-            map[y][x] = floor_char;
-}
+    {
+     for (int x = leaf->room->x; x < leaf->room->x + leaf->room->w; ++x)
+     {
+        map[y][x] = floor_char;
+     }           
+    }
+        
+  }
 }
 
 //====================CONECTA LOS CENTROS DE LAS ROOM HACIENDO UN PASILLO=========//
@@ -188,16 +230,74 @@ void ConnectRooms(std::vector<std::vector<char>>& map, Room* a, Room* b)
  int x1 = a->center_x(), y1 = a->center_y();
  int x2 = b->center_x(), y2 = b->center_y();
 
- if(rng() %2)
+ if(PASILLO_LOGICA == 0)
  {
-   for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x) map[y1][x] = floor_char;
-   for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y) map[y][x2] = floor_char;
+  if(rng() %2)
+   {
+     for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x)
+     {
+        map[y1][x] = floor_char;
+     }
+     for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y)
+     {
+        map[y][x2] = floor_char;
+     } 
+   }
+  else
+   {
+     for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y)
+     {
+        map[y][x1] = floor_char;
+     } 
+     for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x)
+     {
+        map[y2][x] = floor_char;
+     } 
+   }
  }
- else
+
+ else if(PASILLO_LOGICA == 1)
  {
-  for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y) map[y][x1] = floor_char;
-  for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x) map[y2][x] = floor_char;
+   for(int x = std::min(x1, x2); x <= std::max(x1, x2); x++)
+   {
+      map[y1][x] = floor_char;
+   }
+   for(int y = std::min(y1, y2); y <= std::max(y1, y2); y++)
+   {
+      map[y][x2] = floor_char;
+   } 
  }
+
+ else if(PASILLO_LOGICA == 2)
+ {
+   for(int y = std::min(y1, y2); y <= std::max(y1, y2); y++)
+   {
+      map[y][x1] = floor_char;
+   }
+   for(int x = std::min(x1, x2); x <= std::max(x1, x2); x++)
+   {
+      map[y2][x] = floor_char;
+   } 
+ }
+
+ else if(PASILLO_LOGICA == 3)
+ {
+   if(abs(x1 - x2) >= abs(y1 - y2))//Horizontal
+   {
+     for(int x = std::min(x1, x2); x <= std::max(x1, x2); x++)
+     {
+       map[y1][x] = floor_char;
+     } 
+   }
+   else//Vertical
+   {
+     for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y)
+     {
+       map[y][x1] = floor_char;
+     } 
+   }
+ }
+ 
 }
 
 //===============CONECTA LAS ROOMS EN EL ARBOL BSP========//
@@ -207,26 +307,51 @@ void ConnectLeafRoom(std::vector<std::vector<char>>& map, Leaf* leaf)
  {
   Room* a = nullptr;
   Room* b = nullptr;
-  // Busca una habitación en cada subárbol
+  // Busca una habitacion en cada subarbol
   std::vector<Leaf*> stack;
   stack.push_back(leaf->left);
   while (!stack.empty()) 
   {
      Leaf* l = stack.back(); stack.pop_back();
-     if (l->room) { a = l->room; break; }
-     if (l->left) stack.push_back(l->left);
-     if (l->right) stack.push_back(l->right);
+     if (l->room) 
+     { 
+       a = l->room; break; 
+     }
+
+     if (l->left)
+     {
+       stack.push_back(l->left);
+     } 
+
+     if (l->right)
+     {
+       stack.push_back(l->right);
+     } 
   }
 
   stack.push_back(leaf->right);
   while(!stack.empty())
   {
     Leaf* l = stack.back(); stack.pop_back();
-    if (l->room) { b = l->room; break; }
-    if (l->left) stack.push_back(l->left);
-    if (l->right) stack.push_back(l->right);
+    if (l->room)
+    { 
+      b = l->room; break; 
+    }
+
+    if (l->left)
+    {
+      stack.push_back(l->left);
+    } 
+
+    if (l->right)
+    {
+      stack.push_back(l->right);
+    } 
   }
-   if(a && b) ConnectRooms(map, a, b); 
+   if(a && b)
+   {
+     ConnectRooms(map, a, b);
+   }  
    ConnectLeafRoom(map, leaf->left);
    ConnectLeafRoom(map, leaf->right);
  }
@@ -287,7 +412,8 @@ void PlaceExit(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms)
         int cx = rooms[i]->center_x();
         int cy = rooms[i]->center_y();
         int dist = abs(cx - px) + abs(cy - py); // aplica distancia de Manhattan
-        if (dist > max_dist) {
+        if (dist > max_dist) 
+        {
             max_dist = dist;
             idx_salida = i;
         }
@@ -325,8 +451,11 @@ void PrintMap(const std::vector<std::vector<char>>& map)
  for (const auto& row : map)
  { 
     for (char c : row)
+    {
         std::cout << c;
-    std::cout << "\n";
+        
+    }     
+    std::cout << "\n";   
  }
 }
 
@@ -338,7 +467,7 @@ int LeerParametro(const std::string& prompt, int valor_por_defecto, int minimo)
 
  while(true)
  {
-   std::cout << prompt << " (por defecto: " << valor_por_defecto << ", mínimo: " << minimo << "): ";
+   std::cout << prompt << " (por defecto: " << valor_por_defecto << ", minimo: " << minimo << "): ";
    std::getline(std::cin, input);
 
    if(input.empty())
@@ -361,7 +490,7 @@ int LeerParametro(const std::string& prompt, int valor_por_defecto, int minimo)
    }
    catch(const std::exception& e)
    {
-    std::cout << "Por favor, ingresa un número válido o deja en blanco para el valor por defecto.\n";
+    std::cout << "Ingrese un valor soportado || Presione Enter en blanco para usar el valor por defecto.\n";
    }
    
  }
@@ -370,17 +499,42 @@ int LeerParametro(const std::string& prompt, int valor_por_defecto, int minimo)
 
 int main()
 {
-    // Calcula el mínimo requerido para que funcione el BSP
+    int opcion = 0;
+    bool ciclo = true;
+    // Calcula el minimo requerido para que funcione el BSP
     int minimo_tamano = MIN_LEAF_SIZE * 2 + 2;
-
-    // Pide al usuario los parámetros
+  
+  do
+  {    
+     // Pide al usuario los parametros
     std::cout << "=== Parametros del Mapa ===\n";
-    WIDTH = LeerParametro("Ancho (WIDTH)", WIDTH, minimo_tamano);
-    HEIGHT = LeerParametro("Alto (HEIGHT)", HEIGHT, minimo_tamano);
+    WIDTH = LeerParametro("Ancho (WIDTH)\n", WIDTH, minimo_tamano);
+    HEIGHT = LeerParametro("Alto (HEIGHT)\n", HEIGHT, minimo_tamano);
+    
+    std::cout << "===Rango de tamaño de las salas===\n";
+    MIN_ROOM_SIZE = LeerParametro(" Medida minima de la sala :\n", MIN_ROOM_SIZE, 2);
+    MAX_ROOM_SIZE = LeerParametro(" Medida maxima de la sala :\n", MAX_ROOM_SIZE, 4);
+
+    std::cout << "===Conexiones de los pasillos===\n";
+    std::cout << "[0]. Azar | [1]. Horizontal | [2]. Vertical | [3]. Recto\n";
+    PASILLO_LOGICA = LeerParametro(" Ingrese la opcion de conexion :", PASILLO_LOGICA, 0);//esto se nota al generar rooms grandes
+    if(  PASILLO_LOGICA < 0 || PASILLO_LOGICA > 3)
+    {
+      PASILLO_LOGICA = 0;
+    }
+
+    std::cout << "===Parametros de enemigos===\n";
+       ENEMIGOS_HABITACION = LeerParametro("Cantidad de enemigos por habitación", ENEMIGOS_HABITACION, 0); 
+       //No funciono el Perlin Noise :c
+      //FREQ = LeerParametro("Frecuencia de Perlin  | Por defecto: 0.08) : \n", 0.08, 0.01);
+      //THRES = LeerParametro("Umbral de enemigos Perlin  | Por defecto: 0.5)\n", 0.5, 0.0);
+      //MAXSPAWN = LeerParametro("Porcentaje maximo de spawn de enemigos | Por defecto 0.3 (30%) :\n", 0.3, 0);
+      //SECURITYRATIO = LeerParametro("Area segura entorno al Jugador/Salida | Por defecto 3 :\n", 3, 0);
 
     std::cout << "Presiona ENTER para generar un nuevo mapa, ESC para salir...\n";
     while (true) {
-        std::cout << "\033[2J\033[1;1H";
+        std::cout << "\033[2J\033[1;1H"; //Esto es para leer las teclas como esc
+        auto start = std::chrono::high_resolution_clock::now();
 
         std::vector<std::vector<char>> map(HEIGHT, std::vector<char>(WIDTH, wall_char));
         Leaf* root = new Leaf(0, 0, WIDTH, HEIGHT);
@@ -394,21 +548,40 @@ int main()
 
         ConnectLeafRoom(map, root);
         PlacePlayer(map, rooms);
-        PlacedEnemy(map, rooms, 2);
+        PlacedEnemy(map, rooms, 2); 
+        
+        //0.1 es la frecuencia de enemigos agrupados en las zonas de mayor tamaño
+        //0.6 es el umbral de ruido donde aparece un enemigos si es mayor 
+       // PlacedEnemyPerlin(map, FREQ, THRES, enemy_char, floor_char, MAXSPAWN, SECURITYRATIO); //No funciono el Perlin Noise :c
         PlaceExit(map, rooms);
+        
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = end - start;
 
         PrintMap(map);
-
+        std::cout << "\nTiempo en que tardo en generar el mapa :" << elapsed.count() << "ms\n";
         delete root;
 
-        std::cout << "\nENTER = Nuevo mapa   |   ESC = Salir\n";
+        std::cout << "\nENTER = Nuevo mapa [Mismos parametros]  |   ESC = Salir\n";
 
         char c = getch();
         if (c == 27) break;
         while (c != 10 && c != 27) c = getch();
         if (c == 27) break;
     }
-    std::cout << "Terminando proceso...\n";
+    
+    std::cout << "Quiere volver a generar un mapa? [Distintos parametros] || [0]. Si | [2]. No\n";
+    std::cin >> opcion;
+
+    if(opcion == 2)
+    {
+      ciclo = false;
+      std::cout << "Terminando proceso...\n";
+    }
+   
+  } while (ciclo);
+    
+   
     return 0;
 }
 
