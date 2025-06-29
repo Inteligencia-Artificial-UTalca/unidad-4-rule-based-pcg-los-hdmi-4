@@ -367,7 +367,7 @@ void PlacePlayer(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms)
 }
 
 //================GENERAR ENEMIGOS==============//
-void PlacedEnemy(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms, int enemigos_por_habitacion = 1)
+void PlacedEnemy(std::vector<std::vector<char>>& map, std::vector<Room*>& rooms, int enemigos_por_habitacion)
 {
   for(size_t i = 1; i < rooms.size(); ++i)
   {
@@ -509,6 +509,7 @@ int main()
      // Pide al usuario los parametros
     std::cout << "=== Parametros del Mapa ===\n";
     WIDTH = LeerParametro("Ancho (WIDTH)\n", WIDTH, minimo_tamano);
+    std::cout << "\n";
     HEIGHT = LeerParametro("Alto (HEIGHT)\n", HEIGHT, minimo_tamano);
     
     std::cout << "===Rango de tamaño de las salas===\n";
@@ -548,7 +549,7 @@ int main()
 
         ConnectLeafRoom(map, root);
         PlacePlayer(map, rooms);
-        PlacedEnemy(map, rooms, 2); 
+        PlacedEnemy(map, rooms, ENEMIGOS_HABITACION); 
         
         //0.1 es la frecuencia de enemigos agrupados en las zonas de mayor tamaño
         //0.6 es el umbral de ruido donde aparece un enemigos si es mayor 
