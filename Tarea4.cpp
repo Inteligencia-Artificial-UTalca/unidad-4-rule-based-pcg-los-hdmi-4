@@ -24,17 +24,11 @@ int MIN_LEAF_SIZE = 8;
 int PASILLO_LOGICA = 0; //o es azar, 1 horizontal primero y el 2 es vertical primero
 int ENEMIGOS_HABITACION = 5;
 
-//Parametros de PerlinNoise
+//Parametros de PerlinNoise (No implementado)
 double FREQ = 0.08;
 double THRES = 0.5;
 double MAXSPAWN = 0.3; //30% 
 int SECURITYRATIO = 3; //Area segura alrededor del jugador y la salida
-
-//Rango de tamaño de las salas
-//probabilidad de dirección de corte
-//logica de conexión
-
-
 
 // Variables de caractéres
 const char floor_char = '.'; //Camino transitable
@@ -45,7 +39,7 @@ const char player_char = 'P'; //el player
 const char exit_char = 'S'; //La salida
 const char door_char = 'D'; // A futuro
 
-
+//Representa una sala rectangular en el mapa
 struct Room 
 {
   int x, y; //Posiciones 
@@ -54,12 +48,13 @@ struct Room
   int center_y() const {return y + h /2;} //centro vertical
 };
 
+//Nodo del arbol BSP, cada hoja se puede subdividir de 2 en 2
 struct Leaf
 {
   int x, y, w, h; //dimensiones del area
   Leaf* left = nullptr; //hoja hija izquierda
   Leaf* right = nullptr; //hoja hija derecha
-  Room* room = nullptr; // es la room que almacena
+  Room* room = nullptr; // es la room que almacena en la hoja
 
   Leaf(int x_, int y_, int w_, int h_) : x(x_), y(y_), w(w_), h(h_) {}
     ~Leaf() { delete left; delete right; delete room; }
@@ -84,12 +79,14 @@ std::mt19937 rng(static_cast<unsigned int>(time(nullptr)));
 //==================Divide la "hoja" en dos partes que son hijas===============//
 bool Split(Leaf* leaf)
 {
-
+  //Divide la hoja en dos partes segun la orientacion ya sea horizontal o vertical
+  //Si logra dividir devuelve un true y por el contrario un false
   if(leaf ->left || leaf ->right)
   {
-     return false;
+     return false;//Significa que ya fue divido antes
   }
   
+  //Permite determinar la orientacion de la división
   bool splitH = (leaf->w > leaf->h);
   if(leaf->w / leaf->h >= 1.25)
   {
@@ -100,8 +97,10 @@ bool Split(Leaf* leaf)
    splitH = true;
   }
    
+  //Elige el punto de corte (al azar) siempre que esté dentro del rango permitido
   std::uniform_int_distribution<int> split_dist(MIN_LEAF_SIZE, (splitH ? leaf->h : leaf->w) - MIN_LEAF_SIZE);
 
+  //Esto es para que cuando no haya suficiento espacio no siga dividiendo
   if((splitH ? leaf->h : leaf->w) < MIN_LEAF_SIZE * 2)
   {
     return false;
@@ -126,6 +125,8 @@ bool Split(Leaf* leaf)
 
 void SplitAllLeaves(std::vector<Leaf*>& leaves)
 {
+  //Divide de forma recursiva las hojas en la lista
+  //Hasta que no pueda dividir mas de acuerdo al MIN_LEAF_SIZE
   bool did_split;
 
   do
@@ -150,7 +151,8 @@ void SplitAllLeaves(std::vector<Leaf*>& leaves)
 
 
    }
-
+ 
+    //Añade mas hojas a la lista para el siguiente ciclo
     for(auto l : new_leaves) leaves.push_back(l);
   }while(did_split);
 }
@@ -158,6 +160,8 @@ void SplitAllLeaves(std::vector<Leaf*>& leaves)
 //==============GENERADOR DE ROOM CON LAS HOJAS DEL ARBOL============//
 void CreateRoom(Leaf* leaf)
 {
+  //Crea la sala rectangular dentro de la hoja
+  //siempre dentro de los limites establecidos
  if(leaf->left || leaf->right)
  {
    if(leaf->left)
@@ -171,7 +175,7 @@ void CreateRoom(Leaf* leaf)
  }
  else
  {
-
+  //Calcula el tamaño maximo que permite la sala según la hoja 
   int max_room_w = std::min(MAX_ROOM_SIZE, leaf->w - 2);
   int max_room_h = std::min(MAX_ROOM_SIZE, leaf->h - 2);
   if (MIN_ROOM_SIZE > max_room_w || MIN_ROOM_SIZE > max_room_h)
@@ -199,6 +203,8 @@ void CreateRoom(Leaf* leaf)
 //===================DIBUJA LAS ROOMS GENERADAS Y GUARDA SUS PUNTEROS==========//
 void FillRoom(std::vector<std::vector<char>>& map, Leaf* leaf, std::vector<Room*>& rooms)
 {
+  //Completa el mapa con las salas que genero, usando el floor_char como piso
+  //almacena los punteros de las salas en la lista de rooms
   if (leaf->left || leaf->right)
   {  
     if (leaf->left)
@@ -227,6 +233,8 @@ void FillRoom(std::vector<std::vector<char>>& map, Leaf* leaf, std::vector<Room*
 //====================CONECTA LOS CENTROS DE LAS ROOM HACIENDO UN PASILLO=========//
 void ConnectRooms(std::vector<std::vector<char>>& map, Room* a, Room* b)
 {
+  //conecta las salas dibujando un pasillo segun la configuracion
+  
  int x1 = a->center_x(), y1 = a->center_y();
  int x2 = b->center_x(), y2 = b->center_y();
 
@@ -234,10 +242,12 @@ void ConnectRooms(std::vector<std::vector<char>>& map, Room* a, Room* b)
  {
   if(rng() %2)
    {
+     //el horizontal primero
      for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x)
      {
         map[y1][x] = floor_char;
      }
+     //el vertical despues
      for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y)
      {
         map[y][x2] = floor_char;
@@ -245,10 +255,12 @@ void ConnectRooms(std::vector<std::vector<char>>& map, Room* a, Room* b)
    }
   else
    {
+    //vertival primero
      for (int y = std::min(y1, y2); y <= std::max(y1, y2); ++y)
      {
         map[y][x1] = floor_char;
      } 
+     //horizontal despues
      for (int x = std::min(x1, x2); x <= std::max(x1, x2); ++x)
      {
         map[y2][x] = floor_char;
@@ -303,6 +315,8 @@ void ConnectRooms(std::vector<std::vector<char>>& map, Room* a, Room* b)
 //===============CONECTA LAS ROOMS EN EL ARBOL BSP========//
 void ConnectLeafRoom(std::vector<std::vector<char>>& map, Leaf* leaf, int& conexiones)
 {
+  //recorre el arbol bsp conectando las sals entre si
+  //por cada nodo con dos hijos los conecta de izquierda a derecha
  if(leaf->left && leaf->right)
  {
   Room* a = nullptr;
@@ -353,6 +367,7 @@ void ConnectLeafRoom(std::vector<std::vector<char>>& map, Leaf* leaf, int& conex
      ConnectRooms(map, a, b);
      conexiones++;
    }  
+   //lo recorre recursivamente para ambos hijos
    ConnectLeafRoom(map, leaf->left, conexiones);
    ConnectLeafRoom(map, leaf->right, conexiones);
  }
@@ -463,6 +478,10 @@ void PrintMap(const std::vector<std::vector<char>>& map)
 //====================PARAMETRIZAR EL MAPA=============//
 int LeerParametro(const std::string& prompt, int valor_por_defecto, int minimo)
 {
+  //Valida la parametrizacion del mapa
+  //recibe el valor por defecto que es la variable declara
+  //recibe un minimo asignado por el codigo en el main
+  //y compara para evitar que el usuario ingrese un valor por debajo del minimo
  std::string input;
  int valor;
 
