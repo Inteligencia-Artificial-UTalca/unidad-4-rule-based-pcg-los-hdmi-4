@@ -301,7 +301,7 @@ void ConnectRooms(std::vector<std::vector<char>>& map, Room* a, Room* b)
 }
 
 //===============CONECTA LAS ROOMS EN EL ARBOL BSP========//
-void ConnectLeafRoom(std::vector<std::vector<char>>& map, Leaf* leaf)
+void ConnectLeafRoom(std::vector<std::vector<char>>& map, Leaf* leaf, int& conexiones)
 {
  if(leaf->left && leaf->right)
  {
@@ -351,9 +351,10 @@ void ConnectLeafRoom(std::vector<std::vector<char>>& map, Leaf* leaf)
    if(a && b)
    {
      ConnectRooms(map, a, b);
+     conexiones++;
    }  
-   ConnectLeafRoom(map, leaf->left);
-   ConnectLeafRoom(map, leaf->right);
+   ConnectLeafRoom(map, leaf->left, conexiones);
+   ConnectLeafRoom(map, leaf->right, conexiones);
  }
 }
 
@@ -534,6 +535,10 @@ int main()
 
     std::cout << "Presiona ENTER para generar un nuevo mapa, ESC para salir...\n";
     while (true) {
+
+        //Estas variables deben reiniciarse
+        int conexiones = 0;
+        int enemigos_total = 0;
         std::cout << "\033[2J\033[1;1H"; //Esto es para leer las teclas como esc
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -547,7 +552,7 @@ int main()
         std::vector<Room*> rooms;
         FillRoom(map, root, rooms);
 
-        ConnectLeafRoom(map, root);
+        ConnectLeafRoom(map, root,conexiones);
         PlacePlayer(map, rooms);
         PlacedEnemy(map, rooms, ENEMIGOS_HABITACION); 
         
@@ -558,7 +563,22 @@ int main()
         
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> elapsed = end - start;
+        std::cout << "Salas generadas: " << rooms.size() << "\n";
 
+        std::cout << "Conexiones generadas: " << conexiones << "\n";
+
+         for (const auto& row : map)
+         {
+            for (char c : row)
+            {
+               if (c == enemy_char)
+               {
+                  enemigos_total++;
+               }
+            }
+         } 
+
+        std::cout << "Enemigos colocados: " << enemigos_total << "\n";
         PrintMap(map);
         std::cout << "\nTiempo en que tardo en generar el mapa :" << elapsed.count() << "ms\n";
         delete root;
@@ -566,9 +586,18 @@ int main()
         std::cout << "\nENTER = Nuevo mapa [Mismos parametros]  |   ESC = Salir\n";
 
         char c = getch();
-        if (c == 27) break;
-        while (c != 10 && c != 27) c = getch();
-        if (c == 27) break;
+        if (c == 27)
+        {
+           break;
+        } 
+        while (c != 10 && c != 27)
+        {
+           c = getch();
+        } 
+        if (c == 27)
+        {
+          break;
+        } 
     }
     
     std::cout << "Quiere volver a generar un mapa? [Distintos parametros] || [0]. Si | [2]. No\n";
