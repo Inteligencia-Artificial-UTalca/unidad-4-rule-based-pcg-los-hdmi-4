@@ -502,11 +502,17 @@ int main()
 {
     int opcion = 0;
     bool ciclo = true;
+
+  do
+  {    
+    
+    //Parametros de la particion
+    std::cout << "===Parametros de la particion\n";
+    MIN_LEAF_SIZE = LeerParametro("Medida minima de la particion de la hoja:\n",MIN_LEAF_SIZE,4);
+
     // Calcula el minimo requerido para que funcione el BSP
     int minimo_tamano = MIN_LEAF_SIZE * 2 + 2;
   
-  do
-  {    
      // Pide al usuario los parametros
     std::cout << "=== Parametros del Mapa ===\n";
     WIDTH = LeerParametro("Ancho (WIDTH)\n", WIDTH, minimo_tamano);
